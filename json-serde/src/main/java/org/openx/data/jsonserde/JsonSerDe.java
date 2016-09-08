@@ -58,7 +58,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
  * Properties:
  * ignore.malformed.json = true/false : malformed json will be ignored
  *         instead of throwing an exception
- * 
+ *
  * @author rcongiu
  */
 public class JsonSerDe extends AbstractSerDe {
@@ -86,10 +86,10 @@ public class JsonSerDe extends AbstractSerDe {
      * Initializes the SerDe.
      * Gets the list of columns and their types from the table properties.
      * Will use them to look into/create JSON data.
-     * 
+     *
      * @param conf Hadoop configuration object
      * @param tbl  Table Properties
-     * @throws SerDeException 
+     * @throws SerDeException
      */
     @Override
     public void initialize(Configuration conf, Properties tbl) throws SerDeException {
@@ -97,7 +97,7 @@ public class JsonSerDe extends AbstractSerDe {
         // Get column names and sort order
         String columnNameProperty = tbl.getProperty(serdeConstants.LIST_COLUMNS);
         String columnTypeProperty = tbl.getProperty(serdeConstants.LIST_COLUMN_TYPES);
-        
+
         LOG.debug("columns " + columnNameProperty + " types " + columnTypeProperty);
 
         // all table column names
@@ -120,16 +120,16 @@ public class JsonSerDe extends AbstractSerDe {
         // Create row related objects
         rowTypeInfo = (StructTypeInfo) TypeInfoFactory
                 .getStructTypeInfo(columnNames, columnTypes);
-        
+
         // build options
-        options = 
+        options =
                 new JsonStructOIOptions(getMappings(tbl));
 
         // Get the sort order
         String columnSortOrder = tbl.getProperty(serdeConstants.SERIALIZATION_SORT_ORDER);
         columnSortOrderIsDesc = new boolean[columnNames.size()];
         for (int i = 0; i < columnSortOrderIsDesc.length; i++) {
-            columnSortOrderIsDesc[i] = columnSortOrder != null && 
+            columnSortOrderIsDesc[i] = columnSortOrder != null &&
                     columnSortOrder.charAt(i) == '-';
         }
 
@@ -142,32 +142,40 @@ public class JsonSerDe extends AbstractSerDe {
         // other configuration
         ignoreMalformedJson = Boolean.parseBoolean(tbl
                 .getProperty(PROP_IGNORE_MALFORMED_JSON, "false"));
-        
+
     }
 
     /**
      * Deserializes the object. Reads a Writable and uses JSONObject to
      * parse its text
-     * 
+     *
      * @param w the text to parse
      * @return a JSONObject
-     * @throws SerDeException 
+     * @throws SerDeException
      */
     @Override
     public Object deserialize(Writable w) throws SerDeException {
         Text rowText = (Text) w;
         deserializedDataSize = rowText.getBytes().length;
-	
+
         // Try parsing row into JSON object
         Object jObj = null;
-        
+
         try {
-            String txt = rowText.toString().trim();
-            
-            if(txt.startsWith("{")) {
+            String txt = rowText.toString();
+            // Skip key if exists
+            int tabPosition = txt.indexOf("\t");
+            if (tabPosition >= 0) {
+               txt = txt.substring(tabPosition + 1);
+            }
+            txt = txt.trim();
+
+            if (txt.startsWith("{")) {
                 jObj = new JSONObject(txt);
             } else if (txt.startsWith("[")){
                 jObj = new JSONArray(txt);
+            } else {
+               throw JSONException("Bad row format. It should be either object or array.");
             }
         } catch (JSONException e) {
             // If row is not a JSON object, make the whole row NULL
@@ -179,7 +187,7 @@ public class JsonSerDe extends AbstractSerDe {
                 onMalformedJson("Error parsing empty row. This should never happen.");
             }
         }
-	
+
         return jObj;
     }
 
@@ -189,9 +197,9 @@ public class JsonSerDe extends AbstractSerDe {
     }
 
     /**
-     * We serialize to Text 
+     * We serialize to Text
      * @return
-     * 
+     *
      * @see org.apache.hadoop.io.Text
      */
     @Override
@@ -202,15 +210,15 @@ public class JsonSerDe extends AbstractSerDe {
     /**
      * Hive will call this to serialize an object. Returns a writable object
      * of the same class returned by <a href="#getSerializedClass">getSerializedClass</a>
-     * 
+     *
      * @param obj The object to serialize
      * @param objInspector The ObjectInspector that knows about the object's structure
-     * @return a serialized object in form of a Writable. Must be the 
+     * @return a serialized object in form of a Writable. Must be the
      *         same type returned by <a href="#getSerializedClass">getSerializedClass</a>
-     * @throws SerDeException 
+     * @throws SerDeException
      */
     @Override
-    public Writable serialize(Object obj, ObjectInspector objInspector) throws SerDeException {        
+    public Writable serialize(Object obj, ObjectInspector objInspector) throws SerDeException {
         // make sure it is a struct record
         if (objInspector.getCategory() != Category.STRUCT) {
             throw new SerDeException(getClass().toString()
@@ -218,27 +226,27 @@ public class JsonSerDe extends AbstractSerDe {
                     + objInspector.getTypeName());
         }
 
-        JSONObject serializer = 
+        JSONObject serializer =
             serializeStruct( obj, (StructObjectInspector) objInspector, columnNames);
-        
+
         Text t = new Text(serializer.toString());
-        
+
         serializedDataSize = t.getBytes().length;
         return t;
     }
 
     private String getSerializedFieldName( List<String> columnNames, int pos, StructField sf) {
         String n = columnNames==null? sf.getFieldName(): columnNames.get(pos);
-        
+
         if(options.getMappings().containsKey(n)) {
             return options.getMappings().get(n);
         } else {
             return n;
         }
     }
-    
+
     /**
-     * Serializing means getting every field, and setting the appropriate 
+     * Serializing means getting every field, and setting the appropriate
      * JSONObject field. Actual serialization is done at the end when
      * the whole JSON object is built
      */
@@ -250,9 +258,9 @@ public class JsonSerDe extends AbstractSerDe {
         }
 
         JSONObject result = new JSONObject();
-        
+
         List<? extends StructField> fields = soi.getAllStructFieldRefs();
-        
+
         for (int i =0; i< fields.size(); i++) {
             StructField sf = fields.get(i);
             Object data = soi.getStructFieldData(obj, sf);
@@ -262,11 +270,11 @@ public class JsonSerDe extends AbstractSerDe {
                     // we want to serialize columns with their proper HIVE name,
                     // not the _col2 kind of name usually generated upstream
                     result.put(
-                            getSerializedFieldName(columnNames, i, sf), 
+                            getSerializedFieldName(columnNames, i, sf),
                             serializeField(
                                 data,
                                 sf.getFieldObjectInspector()));
-                    
+
                 } catch (JSONException ex) {
                    LOG.warn("Problem serializing", ex);
                    throw new RuntimeException(ex);
@@ -275,19 +283,19 @@ public class JsonSerDe extends AbstractSerDe {
         }
         return result;
     }
-   
+
     /**
      * Serializes a field. Since we have nested structures, it may be called
-     * recursively for instance when defining a list<struct<>> 
-     * 
+     * recursively for instance when defining a list<struct<>>
+     *
      * @param obj Object holding the fields' content
      * @param oi  The field's objec inspector
      * @return  the serialized object
-     */  
+     */
     public Object serializeField(Object obj,
             ObjectInspector oi ){
         if(obj == null) {return null;}
-        
+
         Object result = null;
         switch(oi.getCategory()) {
             case PRIMITIVE:
@@ -346,18 +354,18 @@ public class JsonSerDe extends AbstractSerDe {
     }
 
     /**
-     * Serializes a Hive List using a JSONArray 
-     * 
+     * Serializes a Hive List using a JSONArray
+     *
      * @param obj the object to serialize
      * @param loi the object's inspector
-     * @return 
+     * @return
      */
     private JSONArray serializeList(Object obj, ListObjectInspector loi) {
         // could be an array of whatever!
         // we do it in reverse order since the JSONArray is grown on demand,
         // as higher indexes are added.
         if(obj==null) { return null; }
-        
+
         JSONArray ar = new JSONArray();
         for(int i=loi.getListLength(obj)-1; i>=0; i--) {
             Object element = loi.getListElement(obj, i);
@@ -382,17 +390,17 @@ public class JsonSerDe extends AbstractSerDe {
 
     /**
      * Serializes a Hive map&lt;&gt; using a JSONObject.
-     * 
+     *
      * @param obj the object to serialize
      * @param moi the object's inspector
-     * @return 
+     * @return
      */
     private JSONObject serializeMap(Object obj, MapObjectInspector moi) {
         if (obj==null) { return null; }
-        
-        JSONObject jo = new JSONObject();  
+
+        JSONObject jo = new JSONObject();
         Map m = moi.getMap(obj);
-        
+
         for(Object k : m.keySet()) {
             try {
                 jo.put(
@@ -404,7 +412,7 @@ public class JsonSerDe extends AbstractSerDe {
         }
         return jo;
     }
-    
+
     public void onMalformedJson(String msg) throws SerDeException {
         if(ignoreMalformedJson) {
             LOG.warn("Ignoring malformed JSON: " + msg);
@@ -423,22 +431,22 @@ public class JsonSerDe extends AbstractSerDe {
         return stats;
     }
 
-   
+
     public static final String PFX = "mapping.";
     /**
      * Builds mappings between hive columns and json attributes
-     * 
+     *
      * @param tbl
-     * @return 
+     * @return
      */
     private Map<String, String> getMappings(Properties tbl) {
         int n = PFX.length();
         Map<String,String> mps = new HashMap<String,String>();
-        
+
         for(Object o: tbl.keySet()) {
             if( ! (o instanceof String)) { continue ; }
             String s = (String) o;
-            
+
             if(s.startsWith(PFX) ) {
                 mps.put(s.substring(n), tbl.getProperty(s).toLowerCase());
             }
@@ -447,5 +455,5 @@ public class JsonSerDe extends AbstractSerDe {
     }
 
 
-    
+
 }
