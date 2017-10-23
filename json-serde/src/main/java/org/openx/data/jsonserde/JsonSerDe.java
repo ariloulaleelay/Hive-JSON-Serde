@@ -164,7 +164,7 @@ public class JsonSerDe extends AbstractSerDe {
         try {
             String txt = rowText.toString().trim();
             // Skip key if exists
-            int tabPosition = txt.indexOf("\t");
+            int tabPosition = txt.indexOf('\t');
             if (tabPosition >= 0) {
                txt = txt.substring(tabPosition + 1);
                txt = txt.trim();
@@ -175,7 +175,7 @@ public class JsonSerDe extends AbstractSerDe {
             } else if (txt.startsWith("[")){
                 jObj = new JSONArray(txt);
             } else {
-               throw new JSONException("Bad row format. It should be either object or array.");
+               throw new JSONException("Bad row format. It should be either object or array. Line: `" + txt + "`");
             }
         } catch (JSONException e) {
             // If row is not a JSON object, make the whole row NULL
